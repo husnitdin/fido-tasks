@@ -1,0 +1,52 @@
+Рассмотрим таблицу балансов клиентов:
+ClientBalance(client_id, client_name, client_balance_date, client_balance_value)
+client_id — идентификатор клиента;
+client_name — ФИО клиента;
+client_balance_date — дата баланса клиента;
+client_balance_value — значение баланса клиента.
+Формулировка: в данной таблице в какой-то момент времени появились полные дубликаты.
+Предложите способ для избавления от дубликатов без создания новой таблицы(используя возможности SQL).
+
+1 Solution: Delete duplicate rows
+
+    WITH DuplicateRows AS (
+        SELECT client_id,
+               ROW_NUMBER() OVER (PARTITION BY client_name, client_balance_date, client_balance_value ORDER BY client_id) AS row_num
+        FROM ClientBalance
+    )
+    DELETE FROM ClientBalance
+    WHERE client_id IN (
+        SELECT client_id
+        FROM DuplicateRows
+        WHERE row_num > 1
+    );
+
+
+2 Solution: When inserting data check if it exists if so update the row else insert
+
+INSERT INTO ClientBalance (client_id, client_name, client_balance_date, client_balance_value)
+VALUES (?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    client_name = VALUES(client_name),
+    client_balance_date = VALUES(client_balance_date),
+    client_balance_value = VALUES(client_balance_value);
+
+OR
+
+CREATE FUNCTION AddClientBalance(
+    p_client_id INT,
+    p_client_name VARCHAR,
+    p_client_balance_date DATE,
+    p_client_balance_value NUMERIC
+)
+RETURNS VOID AS $$
+BEGIN
+    INSERT INTO ClientBalance (client_id, client_name, client_balance_date, client_balance_value)
+    VALUES (p_client_id, p_client_name, p_client_balance_date, p_client_balance_value)
+    ON CONFLICT (client_id)
+    DO UPDATE SET
+        client_name = EXCLUDED.client_name,
+        client_balance_date = EXCLUDED.client_balance_date,
+        client_balance_value = EXCLUDED.client_balance_value;
+END;
+$$ LANGUAGE plpgsql;
